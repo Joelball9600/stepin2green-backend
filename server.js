@@ -1,8 +1,7 @@
-// Updated on 2026-08-02 with nodemailer
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
-const nodemailer = require('nodemailer');
+const SibApiV3Sdk = require('sib-api-v3-sdk');
 require('dotenv').config();
 
 const app = express();
@@ -13,82 +12,116 @@ app.use(cors());
 app.use(express.json());
 
 // ============================================
-// 📧 EMAIL CONFIGURATION - RELIABLE SETUP
+// 📧 BREVO (Sendinblue) EMAIL CONFIG
 // ============================================
 
-// Check email config
-const EMAIL_USER = process.env.EMAIL_USER;
-const EMAIL_PASS = process.env.EMAIL_PASS;
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
 
-console.log('📧 Email configured for:', EMAIL_USER || 'NOT SET');
-console.log('📧 Password set:', !!EMAIL_PASS);
+if (BREVO_API_KEY) {
+    // Configure Brevo
+    const defaultClient = SibApiV3Sdk.ApiClient.instance;
+    defaultClient.authentications['api-key'].apiKey = BREVO_API_KEY;
+    console.log('✅ Brevo email service configured');
+    console.log('📧 Free tier: 300 emails/day');
+} else {
+    console.log('⚠️ Brevo NOT configured - add BREVO_API_KEY to Railway Variables');
+    console.log('📧 Sign up at: https://app.brevo.com');
+}
 
-// Create transporter with MOST RELIABLE settings
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true, // Use SSL
-    auth: {
-        user: EMAIL_USER,
-        pass: EMAIL_PASS
-    },
-    debug: false,
-    logger: true
-});
-
-// Verify connection
-transporter.verify(function(error, success) {
-    if (error) {
-        console.log('❌ Email verification failed:');
-        console.log('   Error:', error.message);
-        console.log('');
-        console.log('📧 Please check:');
-        console.log('   1. EMAIL_USER:', EMAIL_USER);
-        console.log('   2. EMAIL_PASS is the 16-character App Password (no spaces)');
-        console.log('   3. Go to myaccount.google.com/apppasswords');
-        console.log('   4. Generate a NEW App Password for "Stepin2Green"');
-        console.log('   5. Copy it WITHOUT spaces and update Railway Variables');
-        console.log('   6. Wait 2-3 minutes for Railway to restart');
-    } else {
-        console.log('✅ Email service ready!');
-    }
-});
-
-// Email function with better error handling
+// Email function using Brevo
 async function sendConfirmationEmail(fullName, email, team) {
-    if (!EMAIL_USER || !EMAIL_PASS) {
-        console.log('⚠️ Email not configured - skipping');
+    if (!BREVO_API_KEY) {
+        console.log('⚠️ Brevo not configured - skipping email');
         return false;
     }
 
     try {
-        console.log(`📧 Sending email to ${email}...`);
-        
-        const info = await transporter.sendMail({
-            from: `"Stepin2Green" <${EMAIL_USER}>`,
-            to: email,
-            subject: `🌱 Welcome to Stepin2Green - ${fullName}`,
-            text: `Hi ${fullName},\n\nThank you for applying to join Stepin2Green!\n\nWe have received your application for the ${team} team.\n\nWe will get back to you shortly.\n\n🌱 Stepin2Green Team`,
-            html: `
-                <h2 style="color:#2d5a4f;">Hi ${fullName},</h2>
-                <p>Thank you for applying to join <strong>Stepin2Green</strong>!</p>
-                <p>We have received your application for the <strong>${team}</strong> team.</p>
-                <p>Our team managers are currently reviewing it.</p>
-                <p>We will get back to you shortly.</p>
-                <br>
-                <p>🌱 Together let's learn, create, and inspire!</p>
-                <p>— Stepin2Green Team</p>
-            `
-        });
+        const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 
+        const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+        sendSmtpEmail.subject = `🌱 Welcome to Stepin2Green - ${fullName}`;
+        sendSmtpEmail.htmlContent = `
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Application Received</title>
+            </head>
+            <body style="margin:0; padding:0; font-family: 'Segoe UI', Arial, sans-serif; background-color: #0a1a17; color: #e2f0e9;">
+                <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a1a17; padding: 20px;">
+                    <tr>
+                        <td align="center">
+                            <table width="100%" max-width="600" cellpadding="0" cellspacing="0" style="max-width: 600px; background-color: #0b1f1c; border-radius: 20px; border: 1px solid rgba(86, 204, 151, 0.15); padding: 30px;">
+                                <tr>
+                                    <td align="center" style="padding-bottom: 20px;">
+                                        <h1 style="color: #8ce0c0; font-size: 2rem; margin: 0; font-weight: 700;">🌱 Stepin2Green</h1>
+                                        <p style="color: #6a8f82; margin: 5px 0 0; font-size: 0.9rem;">science · art · community</p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <h2 style="color: #c6f0df; font-weight: 600; margin: 10px 0 15px;">Hi ${fullName},</h2>
+                                        <p style="line-height: 1.7; font-size: 1rem; color: #e2f0e9;">Thank you for applying to join <strong style="color: #8ce0c0;">Stepin2Green</strong>!</p>
+                                        <p style="line-height: 1.7; font-size: 1rem; color: #e2f0e9;">We have received your application for the <strong style="color: #8ce0c0;">${team}</strong> team and our team managers are currently reviewing it.</p>
+                                        
+                                        <div style="background: rgba(59, 186, 140, 0.08); border-left: 4px solid #3bba8c; padding: 15px 20px; border-radius: 12px; margin: 20px 0;">
+                                            <p style="margin: 0; color: #c6f0df; font-size: 0.95rem;">
+                                                📧 We will get back to you shortly with our decision. 
+                                                <span style="display: block; margin-top: 6px; color: #6a8f82; font-size: 0.85rem;">
+                                                    Keep an eye on your inbox!
+                                                </span>
+                                            </p>
+                                        </div>
+                                        
+                                        <p style="line-height: 1.7; font-size: 1rem; color: #e2f0e9;">In the meantime, feel free to check out our social media:</p>
+                                        <p style="margin: 10px 0 20px;">
+                                            <a href="https://www.instagram.com/stepin2green" style="color: #8ce0c0; text-decoration: none; margin-right: 15px;">
+                                                📸 Instagram
+                                            </a>
+                                            <a href="https://www.tiktok.com/@stepin2green" style="color: #8ce0c0; text-decoration: none;">
+                                                🎵 TikTok
+                                            </a>
+                                        </p>
+                                        
+                                        <hr style="border: none; border-top: 1px solid rgba(86, 204, 151, 0.15); margin: 25px 0 15px;">
+                                        
+                                        <p style="color: #8ce0c0; font-size: 1rem; margin: 0;">
+                                            🌱 Together let's learn, create, and inspire!
+                                        </p>
+                                        <p style="color: #6a8f82; font-size: 0.9rem; margin: 5px 0 0;">
+                                            — Stepin2Green Team
+                                        </p>
+                                        <p style="color: #4a6f62; font-size: 0.75rem; margin-top: 15px; border-top: 1px solid rgba(86, 204, 151, 0.05); padding-top: 15px;">
+                                            This is an automated confirmation email. Please do not reply directly to this email.
+                                        </p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </body>
+            </html>
+        `;
+        sendSmtpEmail.sender = { 
+            name: "Stepin2Green", 
+            email: process.env.EMAIL_USER || "stepin2green2@gmail.com" 
+        };
+        sendSmtpEmail.to = [{ 
+            email: email,
+            name: fullName
+        }];
+
+        const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
         console.log(`✅ Email sent to ${email}`);
-        console.log(`📧 Message ID: ${info.messageId}`);
+        console.log(`📧 Message ID: ${data.messageId}`);
         return true;
     } catch (error) {
-        console.error('❌ Email error:');
-        console.error('   Message:', error.message);
-        console.error('   Code:', error.code);
-        console.error('   Command:', error.command);
+        console.error('❌ Email error:', error.message);
+        if (error.response) {
+            console.error('📧 Response body:', error.response.body);
+        }
         return false;
     }
 }
@@ -140,6 +173,7 @@ app.get('/', (req, res) => {
     res.json({
         message: 'Stepin2Green API',
         status: 'running',
+        emailProvider: BREVO_API_KEY ? 'Brevo' : 'Not configured',
         endpoints: [
             'GET /api/volunteers - View all applications',
             'POST /api/volunteers - Submit application',
@@ -268,8 +302,6 @@ app.get('/admin', (req, res) => {
                     border-radius: 20px;
                     font-size: 0.75rem;
                 }
-                .email-sent { color: #3bba8c; }
-                .email-failed { color: #e67e22; }
                 @media (max-width: 600px) {
                     th, td { padding: 8px 4px; font-size: 0.75rem; }
                 }
@@ -316,5 +348,5 @@ app.get('/admin', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📧 Email service: ${process.env.EMAIL_USER ? 'Configured' : 'Not configured'}`);
+    console.log(`📧 Email provider: ${BREVO_API_KEY ? 'Brevo (300 emails/day free)' : 'Not configured'}`);
 });
