@@ -1,7 +1,7 @@
 {
   "name": "stepin2green-backend",
   "version": "1.0.0",
-  "description": "Stepin2Green volunteer form backend with email notifications",
+  "description": "Stepin2Green volunteer form backend with Brevo email",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -11,6 +11,6 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "mysql2": "^3.6.0",
-    "nodemailer": "^6.9.7"
+    "sib-api-v3-sdk": "^8.5.0"
   }
 }
