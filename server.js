@@ -13,124 +13,82 @@ app.use(cors());
 app.use(express.json());
 
 // ============================================
-// 📧 EMAIL CONFIGURATION (FIXED)
+// 📧 EMAIL CONFIGURATION - FIXED
 // ============================================
 
-// Create transporter with explicit configuration
+// Check if email is configured
+if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.log('⚠️ Email not configured. Set EMAIL_USER and EMAIL_PASS in Railway Variables');
+} else {
+    console.log('📧 Email configured for:', process.env.EMAIL_USER);
+}
+
+// Create transporter with proper config
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true, // true for 465
+    service: 'gmail',
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
     },
     tls: {
         rejectUnauthorized: false
-    },
-    connectionTimeout: 10000, // 10 seconds
-    greetingTimeout: 10000,
-    socketTimeout: 10000
-});
-
-// Log email config on startup (hide password)
-console.log('📧 Email Config:');
-console.log('  User:', process.env.EMAIL_USER || 'NOT SET');
-console.log('  Password set:', !!process.env.EMAIL_PASS);
-
-// Verify email connection on startup
-transporter.verify((error, success) => {
-    if (error) {
-        console.error('❌ Email service error:', error.message);
-        console.log('⚠️ Emails will not be sent. Check EMAIL_PASS in Railway Variables');
-        console.log('📧 Make sure EMAIL_USER and EMAIL_PASS are set correctly');
-    } else {
-        console.log('✅ Email service ready to send emails');
     }
 });
 
-// ============================================
-// 📧 SEND CONFIRMATION EMAIL FUNCTION
-// ============================================
+// Verify connection
+transporter.verify((error, success) => {
+    if (error) {
+        console.error('❌ Email Error:', error.message);
+        console.error('📧 Please check:');
+        console.error('   1. EMAIL_USER is set to the correct Gmail address');
+        console.error('   2. EMAIL_PASS is the 16-character App Password (no spaces)');
+        console.error('   3. 2-Step Verification is enabled on the Gmail account');
+        console.error('   4. App Password was generated correctly');
+    } else {
+        console.log('✅ Email service ready!');
+    }
+});
 
+// Simple email function
 async function sendConfirmationEmail(fullName, email, team) {
-    try {
-        const mailOptions = {
-            from: `"Stepin2Green Team" <${process.env.EMAIL_USER || 'stepin2green2@gmail.com'}>`,
-            to: email,
-            subject: `🌱 Your Application to Stepin2Green - ${fullName}`,
-            html: `
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Application Received</title>
-                </head>
-                <body style="margin:0; padding:0; font-family: 'Segoe UI', Arial, sans-serif; background-color: #0a1a17; color: #e2f0e9;">
-                    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a1a17; padding: 20px;">
-                        <tr>
-                            <td align="center">
-                                <table width="100%" max-width="600" cellpadding="0" cellspacing="0" style="max-width: 600px; background-color: #0b1f1c; border-radius: 20px; border: 1px solid rgba(86, 204, 151, 0.15); padding: 30px;">
-                                    <tr>
-                                        <td align="center" style="padding-bottom: 20px;">
-                                            <h1 style="color: #8ce0c0; font-size: 2rem; margin: 0; font-weight: 700;">🌱 Stepin2Green</h1>
-                                            <p style="color: #6a8f82; margin: 5px 0 0; font-size: 0.9rem;">science · art · community</p>
-                                        </td>
-                                    </tr>
-                                    <tr>
-                                        <td>
-                                            <h2 style="color: #c6f0df; font-weight: 600; margin: 10px 0 15px;">Hi ${fullName},</h2>
-                                            <p style="line-height: 1.7; font-size: 1rem; color: #e2f0e9;">Thank you for applying to join <strong style="color: #8ce0c0;">Stepin2Green</strong>!</p>
-                                            <p style="line-height: 1.7; font-size: 1rem; color: #e2f0e9;">We have received your application for the <strong style="color: #8ce0c0;">${team}</strong> team and our team managers are currently reviewing it.</p>
-                                            
-                                            <div style="background: rgba(59, 186, 140, 0.08); border-left: 4px solid #3bba8c; padding: 15px 20px; border-radius: 12px; margin: 20px 0;">
-                                                <p style="margin: 0; color: #c6f0df; font-size: 0.95rem;">
-                                                    📧 We will get back to you shortly with our decision. 
-                                                    <span style="display: block; margin-top: 6px; color: #6a8f82; font-size: 0.85rem;">
-                                                        Keep an eye on your inbox!
-                                                    </span>
-                                                </p>
-                                            </div>
-                                            
-                                            <p style="line-height: 1.7; font-size: 1rem; color: #e2f0e9;">In the meantime, feel free to check out our social media:</p>
-                                            <p style="margin: 10px 0 20px;">
-                                                <a href="https://www.instagram.com/stepin2green" style="color: #8ce0c0; text-decoration: none; margin-right: 15px;">
-                                                    📸 Instagram
-                                                </a>
-                                                <a href="https://www.tiktok.com/@stepin2green" style="color: #8ce0c0; text-decoration: none;">
-                                                    🎵 TikTok
-                                                </a>
-                                            </p>
-                                            
-                                            <hr style="border: none; border-top: 1px solid rgba(86, 204, 151, 0.15); margin: 25px 0 15px;">
-                                            
-                                            <p style="color: #8ce0c0; font-size: 1rem; margin: 0;">
-                                                🌱 Together let's learn, create, and inspire!
-                                            </p>
-                                            <p style="color: #6a8f82; font-size: 0.9rem; margin: 5px 0 0;">
-                                                — Stepin2Green Team
-                                            </p>
-                                            <p style="color: #4a6f62; font-size: 0.75rem; margin-top: 15px; border-top: 1px solid rgba(86, 204, 151, 0.05); padding-top: 15px;">
-                                                This is an automated confirmation email. Please do not reply directly to this email.
-                                            </p>
-                                        </td>
-                                    </tr>
-                                </table>
-                            </td>
-                        </tr>
-                    </table>
-                </body>
-                </html>
-            `
-        };
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+        console.log('⚠️ Email not configured - skipping email');
+        return false;
+    }
 
-        const info = await transporter.sendMail(mailOptions);
-        console.log(`✅ Confirmation email sent to ${email}`);
-        console.log(`📧 Message ID: ${info.messageId}`);
+    try {
+        await transporter.sendMail({
+            from: `"Stepin2Green" <${process.env.EMAIL_USER}>`,
+            to: email,
+            subject: `🌱 Welcome to Stepin2Green - ${fullName}`,
+            text: `
+Hi ${fullName},
+
+Thank you for applying to join Stepin2Green!
+
+We have received your application for the ${team} team.
+Our team managers are currently reviewing it.
+
+We will get back to you shortly.
+
+🌱 Together let's learn, create, and inspire!
+— Stepin2Green Team
+            `,
+            html: `
+                <h2>Hi ${fullName},</h2>
+                <p>Thank you for applying to join <strong>Stepin2Green</strong>!</p>
+                <p>We have received your application for the <strong>${team}</strong> team.</p>
+                <p>Our team managers are currently reviewing it.</p>
+                <p>We will get back to you shortly.</p>
+                <br>
+                <p>🌱 Together let's learn, create, and inspire!</p>
+                <p>— Stepin2Green Team</p>
+            `
+        });
+        console.log(`✅ Email sent to ${email}`);
         return true;
     } catch (error) {
-        console.error('❌ Email error:', error);
+        console.error('❌ Email error:', error.message);
         return false;
     }
 }
