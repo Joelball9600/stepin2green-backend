@@ -6,80 +6,105 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// MySQL Connection
-const db = mysql.createPool({
+// MySQL Connection with proxy host
+const dbConfig = {
     host: process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT) || 3306,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     waitForConnections: true,
     connectionLimit: 10,
-    queueLimit: 0
-});
+    queueLimit: 0,
+    connectTimeout: 60000,  // 60 seconds for proxy
+    acquireTimeout: 60000
+};
+
+console.log('📊 MySQL Config:');
+console.log('  Host:', dbConfig.host);
+console.log('  Port:', dbConfig.port);
+console.log('  Database:', dbConfig.database);
+console.log('  User:', dbConfig.user);
+console.log('  Password set:', !!dbConfig.password);
+
+const db = mysql.createPool(dbConfig);
 
 // Test connection
 db.getConnection((err, connection) => {
     if (err) {
-        console.error('❌ Database connection failed:', err);
+        console.error('❌ Database connection failed:');
+        console.error('  Error:', err.message);
+        console.error('  Code:', err.code);
+        console.error('  Host:', dbConfig.host);
+        console.error('  Port:', dbConfig.port);
+        // Don't exit - keep server running
         return;
     }
-    console.log('✅ Connected to MySQL database');
+    console.log('✅ Connected to MySQL database!');
+    console.log('📊 Connection ID:', connection.threadId);
     connection.release();
 });
 
-// GET all volunteers (for admin)
+// Routes
+app.get('/', (req, res) => {
+    res.json({
+        message: 'Stepin2Green API',
+        status: 'running',
+        db_host: process.env.DB_HOST,
+        db_port: process.env.DB_PORT
+    });
+});
+
 app.get('/api/volunteers', (req, res) => {
     db.query('SELECT * FROM volunteers ORDER BY submitted_at DESC', (err, results) => {
         if (err) {
             console.error('Query error:', err);
-            return res.status(500).json({ error: 'Database error' });
+            return res.status(500).json({ error: err.message });
         }
         res.json(results);
     });
 });
 
-// POST - Submit volunteer application
 app.post('/api/volunteers', (req, res) => {
     const { fullName, email, background, team, message } = req.body;
 
     if (!fullName || !email) {
-        return res.status(400).json({ 
-            error: 'Name and email are required fields' 
-        });
+        return res.status(400).json({ error: 'Name and email are required' });
     }
 
-    const sql = `
-        INSERT INTO volunteers (full_name, email, background, team, message) 
-        VALUES (?, ?, ?, ?, ?)
-    `;
-    
+    const sql = `INSERT INTO volunteers (full_name, email, background, team, message) VALUES (?, ?, ?, ?, ?)`;
     const values = [fullName, email, background || null, team || 'Not specified', message || null];
 
     db.query(sql, values, (err, result) => {
         if (err) {
             console.error('Insert error:', err);
-            return res.status(500).json({ 
-                error: 'Failed to save application' 
-            });
+            return res.status(500).json({ error: err.message });
         }
-
-        res.status(201).json({
-            success: true,
-            message: 'Application submitted successfully!',
-            id: result.insertId
-        });
+        res.json({ success: true, id: result.insertId });
     });
 });
 
-// Admin page to view submissions
+// Admin page
 app.get('/admin', (req, res) => {
     db.query('SELECT * FROM volunteers ORDER BY submitted_at DESC', (err, results) => {
         if (err) {
-            return res.status(500).send('Database error');
+            console.error('Admin page error:', err);
+            return res.send(`
+                <!DOCTYPE html>
+                <html>
+                <head><title>Database Error</title></head>
+                <body style="font-family: sans-serif; padding: 2rem; background: #0b1f1c; color: #e2f0e9;">
+                    <h1>⚠️ Database Error</h1>
+                    <p>Error: ${err.message}</p>
+                    <p>Host: ${process.env.DB_HOST}</p>
+                    <p>Port: ${process.env.DB_PORT}</p>
+                    <p>Check Railway logs for details.</p>
+                </body>
+                </html>
+            `);
         }
         
         let html = `
@@ -124,8 +149,6 @@ app.get('/admin', (req, res) => {
                 th { 
                     background: #1a3d35; 
                     color: #8ce0c0; 
-                    position: sticky;
-                    top: 0;
                 }
                 tr:hover { background: rgba(59,186,140,0.1); }
                 .badge {
@@ -172,18 +195,6 @@ app.get('/admin', (req, res) => {
         </body>
         </html>`;
         res.send(html);
-    });
-});
-
-// Root route
-app.get('/', (req, res) => {
-    res.json({ 
-        message: 'Stepin2Green API', 
-        endpoints: [
-            '/api/volunteers (GET) - View all applications',
-            '/api/volunteers (POST) - Submit application',
-            '/admin - Admin dashboard'
-        ]
     });
 });
 
