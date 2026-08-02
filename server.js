@@ -13,23 +13,37 @@ app.use(cors());
 app.use(express.json());
 
 // ============================================
-// 📧 EMAIL CONFIGURATION
+// 📧 EMAIL CONFIGURATION (FIXED)
 // ============================================
 
-// Create transporter for Gmail
+// Create transporter with explicit configuration
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // true for 465, false for other ports
     auth: {
-        user: process.env.EMAIL_USER || 'stepin2green2@gmail.com',
-        pass: process.env.EMAIL_PASS  // This is the APP PASSWORD, not your Gmail password!
-    }
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    },
+    tls: {
+        rejectUnauthorized: false
+    },
+    connectionTimeout: 10000, // 10 seconds
+    greetingTimeout: 10000,
+    socketTimeout: 10000
 });
+
+// Log email config on startup (hide password)
+console.log('📧 Email Config:');
+console.log('  User:', process.env.EMAIL_USER || 'NOT SET');
+console.log('  Password set:', !!process.env.EMAIL_PASS);
 
 // Verify email connection on startup
 transporter.verify((error, success) => {
     if (error) {
-        console.error('❌ Email service error:', error);
-        console.log('⚠️ Emails will not be sent. Check EMAIL_PASS in .env');
+        console.error('❌ Email service error:', error.message);
+        console.log('⚠️ Emails will not be sent. Check EMAIL_PASS in Railway Variables');
+        console.log('📧 Make sure EMAIL_USER and EMAIL_PASS are set correctly');
     } else {
         console.log('✅ Email service ready to send emails');
     }
