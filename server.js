@@ -13,69 +13,64 @@ app.use(cors());
 app.use(express.json());
 
 // ============================================
-// 📧 EMAIL CONFIGURATION - FIXED
+// 📧 EMAIL CONFIGURATION - RELIABLE SETUP
 // ============================================
 
-// Check if email is configured
-if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.log('⚠️ Email not configured. Set EMAIL_USER and EMAIL_PASS in Railway Variables');
-} else {
-    console.log('📧 Email configured for:', process.env.EMAIL_USER);
-}
+// Check email config
+const EMAIL_USER = process.env.EMAIL_USER;
+const EMAIL_PASS = process.env.EMAIL_PASS;
 
-// Create transporter with proper config
+console.log('📧 Email configured for:', EMAIL_USER || 'NOT SET');
+console.log('📧 Password set:', !!EMAIL_PASS);
+
+// Create transporter with MOST RELIABLE settings
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // Use SSL
     auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
+        user: EMAIL_USER,
+        pass: EMAIL_PASS
     },
-    tls: {
-        rejectUnauthorized: false
-    }
+    debug: false,
+    logger: true
 });
 
 // Verify connection
-transporter.verify((error, success) => {
+transporter.verify(function(error, success) {
     if (error) {
-        console.error('❌ Email Error:', error.message);
-        console.error('📧 Please check:');
-        console.error('   1. EMAIL_USER is set to the correct Gmail address');
-        console.error('   2. EMAIL_PASS is the 16-character App Password (no spaces)');
-        console.error('   3. 2-Step Verification is enabled on the Gmail account');
-        console.error('   4. App Password was generated correctly');
+        console.log('❌ Email verification failed:');
+        console.log('   Error:', error.message);
+        console.log('');
+        console.log('📧 Please check:');
+        console.log('   1. EMAIL_USER:', EMAIL_USER);
+        console.log('   2. EMAIL_PASS is the 16-character App Password (no spaces)');
+        console.log('   3. Go to myaccount.google.com/apppasswords');
+        console.log('   4. Generate a NEW App Password for "Stepin2Green"');
+        console.log('   5. Copy it WITHOUT spaces and update Railway Variables');
+        console.log('   6. Wait 2-3 minutes for Railway to restart');
     } else {
         console.log('✅ Email service ready!');
     }
 });
 
-// Simple email function
+// Email function with better error handling
 async function sendConfirmationEmail(fullName, email, team) {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-        console.log('⚠️ Email not configured - skipping email');
+    if (!EMAIL_USER || !EMAIL_PASS) {
+        console.log('⚠️ Email not configured - skipping');
         return false;
     }
 
     try {
-        await transporter.sendMail({
-            from: `"Stepin2Green" <${process.env.EMAIL_USER}>`,
+        console.log(`📧 Sending email to ${email}...`);
+        
+        const info = await transporter.sendMail({
+            from: `"Stepin2Green" <${EMAIL_USER}>`,
             to: email,
             subject: `🌱 Welcome to Stepin2Green - ${fullName}`,
-            text: `
-Hi ${fullName},
-
-Thank you for applying to join Stepin2Green!
-
-We have received your application for the ${team} team.
-Our team managers are currently reviewing it.
-
-We will get back to you shortly.
-
-🌱 Together let's learn, create, and inspire!
-— Stepin2Green Team
-            `,
+            text: `Hi ${fullName},\n\nThank you for applying to join Stepin2Green!\n\nWe have received your application for the ${team} team.\n\nWe will get back to you shortly.\n\n🌱 Stepin2Green Team`,
             html: `
-                <h2>Hi ${fullName},</h2>
+                <h2 style="color:#2d5a4f;">Hi ${fullName},</h2>
                 <p>Thank you for applying to join <strong>Stepin2Green</strong>!</p>
                 <p>We have received your application for the <strong>${team}</strong> team.</p>
                 <p>Our team managers are currently reviewing it.</p>
@@ -85,10 +80,15 @@ We will get back to you shortly.
                 <p>— Stepin2Green Team</p>
             `
         });
+
         console.log(`✅ Email sent to ${email}`);
+        console.log(`📧 Message ID: ${info.messageId}`);
         return true;
     } catch (error) {
-        console.error('❌ Email error:', error.message);
+        console.error('❌ Email error:');
+        console.error('   Message:', error.message);
+        console.error('   Code:', error.code);
+        console.error('   Command:', error.command);
         return false;
     }
 }
