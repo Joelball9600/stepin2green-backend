@@ -7,7 +7,6 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
@@ -18,17 +17,13 @@ app.use(express.json());
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 
 if (BREVO_API_KEY) {
-    // Configure Brevo
     const defaultClient = SibApiV3Sdk.ApiClient.instance;
     defaultClient.authentications['api-key'].apiKey = BREVO_API_KEY;
     console.log('✅ Brevo email service configured');
-    console.log('📧 Free tier: 300 emails/day');
 } else {
-    console.log('⚠️ Brevo NOT configured - add BREVO_API_KEY to Railway Variables');
-    console.log('📧 Sign up at: https://app.brevo.com');
+    console.log('⚠️ Brevo NOT configured - add BREVO_API_KEY');
 }
 
-// Email function using Brevo
 async function sendConfirmationEmail(fullName, email, team) {
     if (!BREVO_API_KEY) {
         console.log('⚠️ Brevo not configured - skipping email');
@@ -37,97 +32,35 @@ async function sendConfirmationEmail(fullName, email, team) {
 
     try {
         const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
-
         const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
         sendSmtpEmail.subject = `🌱 Welcome to Stepin2Green - ${fullName}`;
         sendSmtpEmail.htmlContent = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Application Received</title>
-            </head>
-            <body style="margin:0; padding:0; font-family: 'Segoe UI', Arial, sans-serif; background-color: #0a1a17; color: #e2f0e9;">
-                <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #0a1a17; padding: 20px;">
-                    <tr>
-                        <td align="center">
-                            <table width="100%" max-width="600" cellpadding="0" cellspacing="0" style="max-width: 600px; background-color: #0b1f1c; border-radius: 20px; border: 1px solid rgba(86, 204, 151, 0.15); padding: 30px;">
-                                <tr>
-                                    <td align="center" style="padding-bottom: 20px;">
-                                        <h1 style="color: #8ce0c0; font-size: 2rem; margin: 0; font-weight: 700;">🌱 Stepin2Green</h1>
-                                        <p style="color: #6a8f82; margin: 5px 0 0; font-size: 0.9rem;">science · art · community</p>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>
-                                        <h2 style="color: #c6f0df; font-weight: 600; margin: 10px 0 15px;">Hi ${fullName},</h2>
-                                        <p style="line-height: 1.7; font-size: 1rem; color: #e2f0e9;">Thank you for applying to join <strong style="color: #8ce0c0;">Stepin2Green</strong>!</p>
-                                        <p style="line-height: 1.7; font-size: 1rem; color: #e2f0e9;">We have received your application for the <strong style="color: #8ce0c0;">${team}</strong> team and our team managers are currently reviewing it.</p>
-                                        
-                                        <div style="background: rgba(59, 186, 140, 0.08); border-left: 4px solid #3bba8c; padding: 15px 20px; border-radius: 12px; margin: 20px 0;">
-                                            <p style="margin: 0; color: #c6f0df; font-size: 0.95rem;">
-                                                📧 We will get back to you shortly with our decision. 
-                                                <span style="display: block; margin-top: 6px; color: #6a8f82; font-size: 0.85rem;">
-                                                    Keep an eye on your inbox!
-                                                </span>
-                                            </p>
-                                        </div>
-                                        
-                                        <p style="line-height: 1.7; font-size: 1rem; color: #e2f0e9;">In the meantime, feel free to check out our social media:</p>
-                                        <p style="margin: 10px 0 20px;">
-                                            <a href="https://www.instagram.com/stepin2green" style="color: #8ce0c0; text-decoration: none; margin-right: 15px;">
-                                                📸 Instagram
-                                            </a>
-                                            <a href="https://www.tiktok.com/@stepin2green" style="color: #8ce0c0; text-decoration: none;">
-                                                🎵 TikTok
-                                            </a>
-                                        </p>
-                                        
-                                        <hr style="border: none; border-top: 1px solid rgba(86, 204, 151, 0.15); margin: 25px 0 15px;">
-                                        
-                                        <p style="color: #8ce0c0; font-size: 1rem; margin: 0;">
-                                            🌱 Together let's learn, create, and inspire!
-                                        </p>
-                                        <p style="color: #6a8f82; font-size: 0.9rem; margin: 5px 0 0;">
-                                            — Stepin2Green Team
-                                        </p>
-                                        <p style="color: #4a6f62; font-size: 0.75rem; margin-top: 15px; border-top: 1px solid rgba(86, 204, 151, 0.05); padding-top: 15px;">
-                                            This is an automated confirmation email. Please do not reply directly to this email.
-                                        </p>
-                                    </td>
-                                </tr>
-                            </table>
-                        </td>
-                    </tr>
-                </table>
-            </body>
-            </html>
+            <h2 style="color:#2d5a4f;">Hi ${fullName},</h2>
+            <p>Thank you for applying to join <strong>Stepin2Green</strong>!</p>
+            <p>We have received your application for the <strong>${team}</strong> team.</p>
+            <p>Our team managers are currently reviewing it.</p>
+            <p>We will get back to you shortly.</p>
+            <br>
+            <p>🌱 Together let's learn, create, and inspire!</p>
+            <p>— Stepin2Green Team</p>
         `;
         sendSmtpEmail.sender = { 
             name: "Stepin2Green", 
             email: process.env.EMAIL_USER || "stepin2green2@gmail.com" 
         };
-        sendSmtpEmail.to = [{ 
-            email: email,
-            name: fullName
-        }];
+        sendSmtpEmail.to = [{ email: email }];
 
-        const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
+        await apiInstance.sendTransacEmail(sendSmtpEmail);
         console.log(`✅ Email sent to ${email}`);
-        console.log(`📧 Message ID: ${data.messageId}`);
         return true;
     } catch (error) {
         console.error('❌ Email error:', error.message);
-        if (error.response) {
-            console.error('📧 Response body:', error.response.body);
-        }
         return false;
     }
 }
 
 // ============================================
-// 🗄️ DATABASE CONNECTION
+// 🗄️ DATABASE CONNECTION - WITH TIMEZONE
 // ============================================
 
 const dbConfig = {
@@ -140,7 +73,8 @@ const dbConfig = {
     connectionLimit: 10,
     queueLimit: 0,
     connectTimeout: 60000,
-    acquireTimeout: 60000
+    acquireTimeout: 60000,
+    timezone: '+08:00'  // 👈 MALAYSIA TIME (UTC+8)
 };
 
 console.log('📊 MySQL Config:');
@@ -148,16 +82,13 @@ console.log('  Host:', dbConfig.host);
 console.log('  Port:', dbConfig.port);
 console.log('  Database:', dbConfig.database);
 console.log('  User:', dbConfig.user);
-console.log('  Password set:', !!dbConfig.password);
+console.log('  Timezone:', dbConfig.timezone);
 
 const db = mysql.createPool(dbConfig);
 
 db.getConnection((err, connection) => {
     if (err) {
-        console.error('❌ Database connection failed:');
-        console.error('  Error:', err.message);
-        console.error('  Host:', dbConfig.host);
-        console.error('  Port:', dbConfig.port);
+        console.error('❌ Database connection failed:', err.message);
         return;
     }
     console.log('✅ Connected to MySQL database!');
@@ -168,12 +99,10 @@ db.getConnection((err, connection) => {
 // 📋 ROUTES
 // ============================================
 
-// Root route
 app.get('/', (req, res) => {
     res.json({
         message: 'Stepin2Green API',
         status: 'running',
-        emailProvider: BREVO_API_KEY ? 'Brevo' : 'Not configured',
         endpoints: [
             'GET /api/volunteers - View all applications',
             'POST /api/volunteers - Submit application',
@@ -182,7 +111,6 @@ app.get('/', (req, res) => {
     });
 });
 
-// GET all volunteers
 app.get('/api/volunteers', (req, res) => {
     db.query('SELECT * FROM volunteers ORDER BY submitted_at DESC', (err, results) => {
         if (err) {
@@ -201,7 +129,7 @@ app.post('/api/volunteers', async (req, res) => {
         return res.status(400).json({ error: 'Name and email are required' });
     }
 
-    const sql = `INSERT INTO volunteers (full_name, email, background, team, message) VALUES (?, ?, ?, ?, ?)`;
+    const sql = `INSERT INTO volunteers (full_name, email, background, team, message, submitted_at) VALUES (?, ?, ?, ?, ?, NOW())`;
     const values = [fullName, email, background || null, team || 'Not specified', message || null];
 
     db.query(sql, values, async (err, result) => {
@@ -212,7 +140,6 @@ app.post('/api/volunteers', async (req, res) => {
 
         console.log(`✅ Application saved for ${fullName} (ID: ${result.insertId})`);
 
-        // Send confirmation email (don't wait for it to complete)
         let emailSent = false;
         try {
             emailSent = await sendConfirmationEmail(fullName, email, team);
@@ -231,7 +158,10 @@ app.post('/api/volunteers', async (req, res) => {
     });
 });
 
-// Admin page
+// ============================================
+// ADMIN PAGE - WITH TEXT WRAPPING
+// ============================================
+
 app.get('/admin', (req, res) => {
     db.query('SELECT * FROM volunteers ORDER BY submitted_at DESC', (err, results) => {
         if (err) {
@@ -282,11 +212,14 @@ app.get('/admin', (req, res) => {
                     width: 100%; 
                     border-collapse: collapse;
                     font-size: 0.9rem;
+                    table-layout: fixed;
                 }
                 th, td { 
                     padding: 12px 8px; 
                     text-align: left; 
-                    border-bottom: 1px solid #2d5a4f; 
+                    border-bottom: 1px solid #2d5a4f;
+                    word-wrap: break-word;
+                    word-break: break-word;
                 }
                 th { 
                     background: #1a3d35; 
@@ -302,8 +235,43 @@ app.get('/admin', (req, res) => {
                     border-radius: 20px;
                     font-size: 0.75rem;
                 }
+                /* Column widths */
+                .col-id { width: 50px; }
+                .col-name { width: 120px; }
+                .col-email { width: 180px; }
+                .col-team { width: 100px; }
+                .col-background { width: 130px; }
+                .col-message { width: 250px; }
+                .col-submitted { width: 150px; }
+
+                .message-cell {
+                    max-width: 250px;
+                    word-wrap: break-word;
+                    word-break: break-word;
+                    white-space: normal;
+                    line-height: 1.5;
+                }
+                .message-cell .full-text {
+                    display: block;
+                    max-height: none;
+                    overflow: visible;
+                    font-size: 0.85rem;
+                    color: #c6f0df;
+                }
+                .message-cell .label {
+                    color: #6a8f82;
+                    font-size: 0.7rem;
+                    display: block;
+                    margin-bottom: 2px;
+                }
+
                 @media (max-width: 600px) {
                     th, td { padding: 8px 4px; font-size: 0.75rem; }
+                    .col-id { width: 30px; }
+                    .col-name { width: 80px; }
+                    .col-email { width: 100px; }
+                    .col-message { width: 120px; }
+                    .col-submitted { width: 100px; }
                 }
             </style>
         </head>
@@ -314,23 +282,26 @@ app.get('/admin', (req, res) => {
                 <div class="table-wrapper">
                     <table>
                         <tr>
-                            <th>ID</th>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Team</th>
-                            <th>Background</th>
-                            <th>Message</th>
-                            <th>Submitted</th>
+                            <th class="col-id">ID</th>
+                            <th class="col-name">Name</th>
+                            <th class="col-email">Email</th>
+                            <th class="col-team">Team</th>
+                            <th class="col-background">Background</th>
+                            <th class="col-message">Message</th>
+                            <th class="col-submitted">Submitted</th>
                         </tr>
                         ${results.map(row => `
                             <tr>
-                                <td>${row.id}</td>
-                                <td><strong>${row.full_name}</strong></td>
-                                <td><a href="mailto:${row.email}" style="color: #6cd4b0;">${row.email}</a></td>
-                                <td><span class="badge">${row.team}</span></td>
-                                <td>${row.background || '-'}</td>
-                                <td>${row.message ? row.message.substring(0, 50) + (row.message.length > 50 ? '...' : '') : '-'}</td>
-                                <td>${new Date(row.submitted_at).toLocaleString()}</td>
+                                <td class="col-id">${row.id}</td>
+                                <td class="col-name"><strong>${row.full_name}</strong></td>
+                                <td class="col-email"><a href="mailto:${row.email}" style="color: #6cd4b0;">${row.email}</a></td>
+                                <td class="col-team"><span class="badge">${row.team}</span></td>
+                                <td class="col-background">${row.background || '-'}</td>
+                                <td class="col-message message-cell">
+                                    <span class="label">📝 Message:</span>
+                                    <span class="full-text">${row.message ? row.message : '-'}</span>
+                                </td>
+                                <td class="col-submitted">${row.submitted_at ? new Date(row.submitted_at).toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' }) : '-'}</td>
                             </tr>
                         `).join('')}
                     </table>
@@ -348,5 +319,4 @@ app.get('/admin', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`📧 Email provider: ${BREVO_API_KEY ? 'Brevo (300 emails/day free)' : 'Not configured'}`);
 });
