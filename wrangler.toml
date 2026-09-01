@@ -8,7 +8,7 @@ enabled = true
 [vars]
 # Comma-separated list of the sites allowed to POST to this API.
 # Put your real Cloudflare Pages URL and custom domain here.
-ALLOWED_ORIGINS = "https://stepin2green.pages.dev"
+ALLOWED_ORIGINS = "stepin2green-website.stepin2green2.workers.dev"
 
 # Must be a sender address you have verified inside Brevo.
 BREVO_SENDER_EMAIL = "stepin2green2@gmail.com"
