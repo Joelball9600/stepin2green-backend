@@ -1,0 +1,20 @@
+name = "stepin2green-backend"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+
+[observability]
+enabled = true
+
+[vars]
+# Comma-separated list of the sites allowed to POST to this API.
+# Put your real Cloudflare Pages URL and custom domain here.
+ALLOWED_ORIGINS = "https://stepin2green.pages.dev"
+
+# Must be a sender address you have verified inside Brevo.
+BREVO_SENDER_EMAIL = "stepin2green2@gmail.com"
+BREVO_SENDER_NAME = "Stepin2Green"
+
+# Secrets — do NOT put these here. Set them with:
+#   npx wrangler secret put DATABASE_URL
+#   npx wrangler secret put BREVO_API_KEY
+#   npx wrangler secret put ADMIN_PASSWORD
