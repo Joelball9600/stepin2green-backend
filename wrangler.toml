@@ -1,20 +1,24 @@
 name = "stepin2green-backend"
 main = "src/index.js"
 compatibility_date = "2026-09-01"
-
+compatibility_flags = ["nodejs_compat"]
+ 
 [observability]
 enabled = true
-
+ 
 [vars]
-# Comma-separated list of the sites allowed to POST to this API.
-# Put your real Cloudflare Pages URL and custom domain here.
-ALLOWED_ORIGINS = "stepin2green-website.stepin2green2.workers.dev"
-
+# Username for the main admin account. Its password is the ADMIN_PASSWORD
+# secret. Extra staff logins go in the ADMIN_USERS secret instead.
+ADMIN_USERNAME = "admin"
+ 
+# The sites allowed to POST to this API, comma-separated.
+ALLOWED_ORIGINS = "https://stepin2green-website.stepin2green2.workers.dev"
+ 
 # Must be a sender address you have verified inside Brevo.
 BREVO_SENDER_EMAIL = "stepin2green2@gmail.com"
 BREVO_SENDER_NAME = "Stepin2Green"
-
-# Secrets — do NOT put these here. Set them with:
-#   npx wrangler secret put DATABASE_URL
-#   npx wrangler secret put BREVO_API_KEY
-#   npx wrangler secret put ADMIN_PASSWORD
+ 
+# Secrets are NOT set here — add them in the Cloudflare dashboard under
+# Settings → Variables and Secrets:
+#   DATABASE_URL, BREVO_API_KEY, ADMIN_PASSWORD, and optionally ADMIN_USERS.
+ 
