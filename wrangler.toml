@@ -9,7 +9,7 @@ enabled = true
 [vars]
 # Username for the main admin account. Its password is the ADMIN_PASSWORD
 # secret. Extra staff logins go in the ADMIN_USERS secret instead.
-ADMIN_USERNAME = "admin"
+ADMIN_USERNAME = "stepin2green"
  
 # The sites allowed to POST to this API, comma-separated.
 ALLOWED_ORIGINS = "https://stepin2green-website.stepin2green2.workers.dev"
