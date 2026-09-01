@@ -5,23 +5,25 @@
  * Database:  TiDB Cloud Starter (MySQL-compatible, free forever)
  * Email:     Brevo transactional email HTTP API
  *
- * Secrets (set with `npx wrangler secret put <NAME>`):
+ * Secrets (Cloudflare dashboard → Settings → Variables and Secrets):
  *   DATABASE_URL    mysql://user:password@host/database
  *   BREVO_API_KEY   xkeysib-...
- *   ADMIN_PASSWORD  password for the /admin page and GET /api/volunteers
+ *   ADMIN_PASSWORD  password for the main admin account
+ *   ADMIN_USERS     optional extra logins: "name:password,name2:password2"
  *
- * Plain vars (in wrangler.toml):
+ * Plain vars (in wrangler.toml — the dashboard is overwritten on each deploy):
+ *   ADMIN_USERNAME       username for the main admin account (default "admin")
  *   ALLOWED_ORIGINS      comma-separated list of allowed website origins
  *   BREVO_SENDER_EMAIL   verified sender address in Brevo
  *   BREVO_SENDER_NAME    display name on the email
  */
-
+ 
 import { connect } from '@tidbcloud/serverless';
-
+ 
 // ============================================
 // 🔧 SMALL HELPERS
 // ============================================
-
+ 
 /** Escape text before putting it inside HTML. Stops a submitted name
  *  containing <script> from running on the admin page. */
 function esc(value) {
@@ -33,19 +35,19 @@ function esc(value) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
-
+ 
 function corsHeaders(request, env) {
   const origin = request.headers.get('Origin') || '';
   const allowed = (env.ALLOWED_ORIGINS || '')
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean);
-
+ 
   // If no list is configured, fall back to allowing everything (same as the
   // old `app.use(cors())`). Once ALLOWED_ORIGINS is set, only those match.
   const allowOrigin =
     allowed.length === 0 ? '*' : allowed.includes(origin) ? origin : allowed[0];
-
+ 
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
@@ -54,7 +56,7 @@ function corsHeaders(request, env) {
     Vary: 'Origin',
   };
 }
-
+ 
 function json(data, request, env, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -64,14 +66,14 @@ function json(data, request, env, status = 200) {
     },
   });
 }
-
+ 
 function html(body, status = 200) {
   return new Response(body, {
     status,
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   });
 }
-
+ 
 /** Constant-time-ish string compare, so the password can't be guessed by timing. */
 function safeEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
@@ -80,32 +82,99 @@ function safeEqual(a, b) {
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
 }
-
-/** HTTP Basic auth. Username is ignored, only the password matters. */
-function isAuthorised(request, env) {
-  if (!env.ADMIN_PASSWORD) return false;
+ 
+/**
+ * Who is allowed into /admin.
+ *
+ * The main account comes from ADMIN_USERNAME (a plain var, defaults to
+ * "admin") plus ADMIN_PASSWORD (a secret).
+ *
+ * To give teammates their own logins, add an ADMIN_USERS secret holding
+ * `name:password` pairs separated by commas:
+ *
+ *     aisyah:LeafyPine44,daniel:RiverStone91
+ *
+ * Separate logins are worth the extra minute: when someone leaves the team you
+ * remove their pair instead of changing the password for everybody, and the
+ * logs show who actually signed in.
+ */
+function adminAccounts(env) {
+  const accounts = [];
+ 
+  const mainUser = (env.ADMIN_USERNAME || 'admin').trim();
+  const mainPass = (env.ADMIN_PASSWORD || '').trim();
+  if (mainPass) accounts.push({ user: mainUser, pass: mainPass });
+ 
+  for (const entry of String(env.ADMIN_USERS || '').split(',')) {
+    const sep = entry.indexOf(':');
+    if (sep === -1) continue;
+    const user = entry.slice(0, sep).trim();
+    const pass = entry.slice(sep + 1).trim();
+    if (user && pass) accounts.push({ user, pass });
+  }
+ 
+  return accounts;
+}
+ 
+/**
+ * HTTP Basic auth. Returns the signed-in username, or null.
+ * Both fields are trimmed — a trailing space pasted into the Cloudflare
+ * dashboard is otherwise impossible to spot. Usernames are case-insensitive;
+ * passwords are exact.
+ */
+function authenticate(request, env) {
+  const accounts = adminAccounts(env);
+  if (accounts.length === 0) {
+    console.error('🔒 No admin accounts configured — set ADMIN_PASSWORD.');
+    return null;
+  }
+ 
   const header = request.headers.get('Authorization') || '';
-  if (!header.startsWith('Basic ')) return false;
+  if (!/^Basic\s/i.test(header)) return null;
+ 
   let decoded;
   try {
-    decoded = atob(header.slice(6));
+    decoded = atob(header.replace(/^Basic\s+/i, '').trim());
   } catch {
-    return false;
+    console.error('🔒 Could not decode the Authorization header.');
+    return null;
   }
-  const password = decoded.slice(decoded.indexOf(':') + 1);
-  return safeEqual(password, env.ADMIN_PASSWORD);
+ 
+  const sep = decoded.indexOf(':');
+  const user = (sep === -1 ? decoded : decoded.slice(0, sep)).trim();
+  const pass = (sep === -1 ? '' : decoded.slice(sep + 1)).trim();
+ 
+  for (const account of accounts) {
+    if (
+      safeEqual(user.toLowerCase(), account.user.toLowerCase()) &&
+      safeEqual(pass, account.pass)
+    ) {
+      return account.user;
+    }
+  }
+ 
+  // Usernames are not secret and knowing which one was tried is useful.
+  // Passwords are never logged — only their length.
+  console.error(
+    `🔒 Sign-in refused for username "${user}" (password ${pass.length} chars). ` +
+      `Known usernames: ${accounts.map((a) => a.user).join(', ')}`
+  );
+  return null;
 }
-
+ 
 function unauthorised() {
-  return new Response('Authentication required.', {
-    status: 401,
-    headers: {
-      'WWW-Authenticate': 'Basic realm="Stepin2Green admin", charset="UTF-8"',
-      'Content-Type': 'text/plain; charset=utf-8',
-    },
-  });
+  return new Response(
+    'Sign in required.\n\nEnter your Stepin2Green admin username and password.',
+    {
+      status: 401,
+      headers: {
+        'WWW-Authenticate': 'Basic realm="Stepin2Green admin"',
+        'Content-Type': 'text/plain; charset=utf-8',
+      },
+    }
+  );
 }
-
+ 
 /** Rows are stored in UTC; show them in Malaysian time. */
 function formatKL(raw) {
   if (!raw) return '-';
@@ -127,15 +196,15 @@ function formatKL(raw) {
     hour12: true,
   });
 }
-
+ 
 function db(env) {
   return connect({ url: env.DATABASE_URL });
 }
-
+ 
 // ============================================
 // 📧 EMAIL — BREVO HTTP API
 // ============================================
-
+ 
 function confirmationHtml(fullName, team, instagram) {
   const name = esc(fullName);
   const teamName = esc(team);
@@ -159,7 +228,7 @@ function confirmationHtml(fullName, team, instagram) {
               <p style="line-height: 1.7; font-size: 1rem; color: #e2f0e9;">Thank you for applying to join <strong style="color: #8ce0c0;">Stepin2Green</strong>!</p>
               <p style="line-height: 1.7; font-size: 1rem; color: #e2f0e9;">We have received your application for the <strong style="color: #8ce0c0;">${teamName}</strong> team.</p>
               <p style="line-height: 1.7; font-size: 1rem; color: #e2f0e9;">We'll reach out to you on Instagram at <strong style="color: #8ce0c0;">${ig}</strong> for next steps.</p>
-
+ 
               <div style="background: rgba(59, 186, 140, 0.08); border-left: 4px solid #3bba8c; padding: 15px 20px; border-radius: 12px; margin: 20px 0;">
                 <p style="margin: 0; color: #c6f0df; font-size: 0.95rem;">
                   📧 We will get back to you shortly with our decision.
@@ -168,9 +237,9 @@ function confirmationHtml(fullName, team, instagram) {
                   </span>
                 </p>
               </div>
-
+ 
               <hr style="border: none; border-top: 1px solid rgba(86, 204, 151, 0.15); margin: 25px 0 15px;">
-
+ 
               <p style="color: #8ce0c0; font-size: 1rem; margin: 0;">🌱 Together let's learn, create, and inspire!</p>
               <p style="color: #6a8f82; font-size: 0.9rem; margin: 5px 0 0;">— Stepin2Green Team</p>
               <p style="color: #4a6f62; font-size: 0.75rem; margin-top: 15px; border-top: 1px solid rgba(86, 204, 151, 0.05); padding-top: 15px;">
@@ -185,7 +254,7 @@ function confirmationHtml(fullName, team, instagram) {
 </body>
 </html>`;
 }
-
+ 
 async function sendConfirmationEmail(env, fullName, email, team, instagram) {
   if (!env.BREVO_API_KEY) {
     console.error('❌ BREVO_API_KEY is not set — skipping email');
@@ -209,7 +278,7 @@ async function sendConfirmationEmail(env, fullName, email, team, instagram) {
         htmlContent: confirmationHtml(fullName, team, instagram),
       }),
     });
-
+ 
     if (!res.ok) {
       console.error('❌ Brevo error:', res.status, await res.text());
       return false;
@@ -221,11 +290,11 @@ async function sendConfirmationEmail(env, fullName, email, team, instagram) {
     return false;
   }
 }
-
+ 
 // ============================================
 // 📋 ROUTE HANDLERS
 // ============================================
-
+ 
 async function handleRoot(request, env) {
   return json(
     {
@@ -241,9 +310,9 @@ async function handleRoot(request, env) {
     env
   );
 }
-
+ 
 async function handleListVolunteers(request, env) {
-  if (!isAuthorised(request, env)) return unauthorised();
+  if (!authenticate(request, env)) return unauthorised();
   try {
     const conn = db(env);
     const rows = await conn.execute(
@@ -255,7 +324,7 @@ async function handleListVolunteers(request, env) {
     return json({ error: err.message }, request, env, 500);
   }
 }
-
+ 
 async function handleSubmit(request, env) {
   let body;
   try {
@@ -263,17 +332,17 @@ async function handleSubmit(request, env) {
   } catch {
     return json({ error: 'Invalid JSON body' }, request, env, 400);
   }
-
+ 
   const trim = (v, max) =>
     typeof v === 'string' ? v.trim().slice(0, max) : null;
-
+ 
   const fullName = trim(body.fullName, 120);
   const email = trim(body.email, 200);
   const instagram = trim(body.instagram, 120);
   const background = trim(body.background, 400);
   const team = trim(body.team, 60) || 'Not specified';
   const message = trim(body.message, 4000);
-
+ 
   if (!fullName || !email || !instagram) {
     return json(
       { error: 'Name, email and Instagram handle are required' },
@@ -285,11 +354,11 @@ async function handleSubmit(request, env) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return json({ error: 'Please enter a valid email address' }, request, env, 400);
   }
-
+ 
   let insertId = null;
   try {
     const conn = db(env);
-
+ 
     // Guard against double-submits. Six of the rows migrated from Railway were
     // the same person hitting send two to four times within ~90 seconds, so
     // treat an identical email inside a 5-minute window as the same application.
@@ -314,7 +383,7 @@ async function handleSubmit(request, env) {
         env
       );
     }
-
+ 
     const result = await conn.execute(
       `INSERT INTO volunteers (full_name, email, instagram, background, team, message, submitted_at)
        VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())`,
@@ -328,14 +397,14 @@ async function handleSubmit(request, env) {
     console.error('Insert error:', err);
     return json({ error: err.message }, request, env, 500);
   }
-
+ 
   let emailSent = false;
   try {
     emailSent = await sendConfirmationEmail(env, fullName, email, team, instagram);
   } catch (err) {
     console.error('Email error:', err);
   }
-
+ 
   return json(
     {
       success: true,
@@ -349,10 +418,11 @@ async function handleSubmit(request, env) {
     env
   );
 }
-
+ 
 async function handleAdmin(request, env) {
-  if (!isAuthorised(request, env)) return unauthorised();
-
+  const signedInAs = authenticate(request, env);
+  if (!signedInAs) return unauthorised();
+ 
   let results;
   try {
     const conn = db(env);
@@ -371,7 +441,7 @@ async function handleAdmin(request, env) {
       500
     );
   }
-
+ 
   const rows = results
     .map(
       (row) => `
@@ -390,7 +460,7 @@ async function handleAdmin(request, env) {
         </tr>`
     )
     .join('');
-
+ 
   return html(`<!DOCTYPE html>
 <html>
 <head>
@@ -405,6 +475,7 @@ async function handleAdmin(request, env) {
     .stats { background: rgba(23,52,46,0.6); padding: 1rem; border-radius: 12px; margin-bottom: 1.5rem;
              display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.8rem; }
     .stats a { color:#8ce0c0; font-size:0.85rem; }
+    .stats .whoami { color:#6a8f82; font-size:0.85rem; }
     .table-wrapper { overflow-x: auto; background: rgba(23,52,46,0.6); border-radius: 12px; padding: 0.5rem; }
     table { width: 100%; border-collapse: collapse; font-size: 0.85rem; table-layout: fixed; }
     th, td { padding: 10px 6px; text-align: left; border-bottom: 1px solid #2d5a4f;
@@ -432,6 +503,7 @@ async function handleAdmin(request, env) {
     <h1>🌱 Volunteer Applications</h1>
     <div class="stats">
       <span>Total: ${results.length} submissions</span>
+      <span class="whoami">Signed in as <strong>${esc(signedInAs)}</strong></span>
       <a href="/admin/export.csv">⬇ Download CSV</a>
     </div>
     <div class="table-wrapper">
@@ -453,9 +525,9 @@ async function handleAdmin(request, env) {
 </body>
 </html>`);
 }
-
+ 
 async function handleExport(request, env) {
-  if (!isAuthorised(request, env)) return unauthorised();
+  if (!authenticate(request, env)) return unauthorised();
   try {
     const conn = db(env);
     const results = await conn.execute(
@@ -490,20 +562,20 @@ async function handleExport(request, env) {
     return new Response(`Export failed: ${err.message}`, { status: 500 });
   }
 }
-
+ 
 // ============================================
 // 🚀 WORKER ENTRY POINT
 // ============================================
-
+ 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, '') || '/';
-
+ 
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(request, env) });
     }
-
+ 
     if (path === '/' && request.method === 'GET') return handleRoot(request, env);
     if (path === '/api/volunteers' && request.method === 'GET')
       return handleListVolunteers(request, env);
@@ -512,7 +584,7 @@ export default {
     if (path === '/admin' && request.method === 'GET') return handleAdmin(request, env);
     if (path === '/admin/export.csv' && request.method === 'GET')
       return handleExport(request, env);
-
+ 
     return json({ error: 'Not found' }, request, env, 404);
   },
 };
